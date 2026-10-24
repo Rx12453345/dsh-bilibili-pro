@@ -1,0 +1,22 @@
+# Dependencies and package-manager output
+node_modules/
+.npm-cache/
+dist/
+coverage/
+
+# Local bundles and test artifacts
+bili-out*/
+bilibili-login/
+.test-dsh-home/
+*.tgz
+
+# Credentials and local environment
+.env
+.env.*
+cookies.txt
+cookie*.json
+*_cookie*.txt
+
+# Editor / OS
+.DS_Store
+Thumbs.db

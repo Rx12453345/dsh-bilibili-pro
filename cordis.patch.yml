@@ -1,0 +1,56 @@
+# dsh-bilibili-pro bundle patch: one row that registers the
+# `bilibili-video-analysis` skill and the nine tools:
+#   bilibili_login / bilibili_video_info / bilibili_subtitles /
+#   bilibili_transcript_part / bilibili_transcript_search / bilibili_frames /
+#   bilibili_transcribe / bilibili_asr_setup / bilibili_series.
+#
+# `bilibili_transcribe` uses Bilibili's own Bcut (必剪) ASR by default: no local
+# model, no sign-in. faster-whisper is an OPTIONAL fallback that the plugin does
+# not bundle and never installs by itself; `bilibili_asr_setup` creates it only
+# after the user chooses persistent or temporary mode.
+#
+# Optional row config (all fields have defaults; an empty config is valid):
+#   - id: bilibili-pro
+#     name: 'dsh-bilibili-pro'
+#     config:
+#       cookieFile: ~/.dsh/bilibili-cookies.json  # default: $DSH_HOME/bilibili-cookies.json
+#       sessdata: ''                              # or set BILIBILI_SESSDATA in $DSH_HOME/.env
+#       language: ai-zh                           # preferred subtitle track
+#       retries: 6                                # subtitle attempts under rate limiting
+#       retryBaseDelayMs: 8000                    # first backoff; grows by 3000 ms per attempt
+#       timeoutMs: 20000                          # per HTTP request
+#       outDir: bili-out                          # transcript bundle root
+#       partChars: 6000                           # characters per transcript part
+#       partSeconds: 600                          # maximum span of one part, in seconds
+#       indexChunkSeconds: 300                    # one time-index entry per five minutes
+#       gapSeconds: 10                            # report subtitle gaps at least this long
+#       ffmpegPath: ''                            # default: autodetect ffmpeg on PATH
+#       bcutTimeoutMs: 600000                     # Bcut overall polling budget
+#       bcutPollMs: 5000                          # Bcut result polling interval
+#       asrPython: ''                             # optional faster-whisper interpreter; default: autodetect
+#       asrVenv: ''                               # default: $DSH_HOME/bilibili-asr/venv
+#       asrModel: small                           # faster-whisper model for the optional fallback
+#       asrModelDir: ''                           # default: $DSH_HOME/bilibili-asr/models
+#       asrLanguage: auto                         # spoken language for the optional fallback
+#       maxFrames: 6                              # default frames per bilibili_frames call
+#       quality: 64                               # 16=360p, 32=480p, 64=720p, 80=1080p
+#       downloadVideo: true                       # capture frames from a local cached video
+#       keepVideo: false                          # retain the cached video after capture
+#       maxVideoMinutes: 60                       # above this, per-frame remote capture
+#       maxDownloadMb: 1500                       # video download cap
+#       detectScenes: true                        # scene-change candidates for auto plans
+#       sceneThreshold: 0.4                       # ffmpeg scene filter threshold
+#       sharpFrames: true                         # blurdetect sharpest frame near each moment
+#       sceneAlignSeconds: 4                      # align requested moments to nearby scene peaks
+#       frameTimeoutMs: 20000                     # per-frame ffmpeg budget
+#       videoCacheHours: 24                       # local video cache TTL
+#       visionProvider: none                      # none | ollama | llama-cpp | openai-compatible
+#       visionBaseUrl: ''                         # explicit endpoint; provider defaults otherwise
+#       visionModel: medium                       # low/medium/high or an explicit model
+#       visionApiKey: ''                          # optional; never logged
+#       visionPrompt: ''                          # optional override prompt
+#       visionMaxFrames: 6                        # max frames described per call
+#       visionTimeoutMs: 120000                   # per-frame vision request budget
+- insert:
+    - id: bilibili-pro
+      name: 'dsh-bilibili-pro'

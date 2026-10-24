@@ -1,0 +1,66 @@
+{
+  "name": "dsh-bilibili-pro",
+  "version": "0.2.3",
+  "type": "module",
+  "description": "Bilibili video analysis for DeepSeek Harness: validated subtitle track, paged/searchable transcript, picture-driven frame capture, and optional vision descriptions.",
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "lib",
+    "python",
+    "skills",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md",
+    "tests"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:inprocess": "node --test --test-isolation=none \"tests/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "bilibili",
+    "subtitle",
+    "transcript",
+    "summary",
+    "frames",
+    "html"
+  ],
+  "author": "Rx12453345",
+  "contributors": [
+    "Adamaik",
+    "CZX2244"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rx12453345/dsh-bilibili-pro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rx12453345/dsh-bilibili-pro/issues"
+  },
+  "homepage": "https://github.com/Rx12453345/dsh-bilibili-pro#readme",
+  "engines": {
+    "node": "^22.19 || >=24"
+  }
+}
