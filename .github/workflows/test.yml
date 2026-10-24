@@ -26,6 +26,6 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Test
-        run: npm run test:inprocess
+        run: node --test tests/unit/*.test.mjs tests/integration/*.test.mjs
       - name: Package check
         run: npm pack --dry-run
