@@ -109,11 +109,12 @@ test('readTranscriptBundle returns undefined for a missing or corrupt bundle', (
 })
 
 test('bundle paths reject traversal and page zero', () => {
-  assert.throws(() => bundleDirFor('C:/out', '../escape', 1), /invalid bvid/)
-  assert.throws(() => bundleDirFor('C:/out', 'BV1xx411c7mD', 0), /invalid page/)
-  assert.throws(() => bundleDirFor('C:/out', 'BV1xx411c7mD', 'nope'), /invalid page/)
-  assert.equal(bundleDirFor('C:/out', 'BV1xx411c7mD', 1), join('C:/out', 'BV1xx411c7mD'))
-  assert.equal(bundleDirFor('C:/out', 'BV1xx411c7mD', 3), join('C:/out', 'BV1xx411c7mD', 'p3'))
+  const out = join(tmpdir(), 'dsh-bili-store-root')
+  assert.throws(() => bundleDirFor(out, '../escape', 1), /invalid bvid/)
+  assert.throws(() => bundleDirFor(out, 'BV1xx411c7mD', 0), /invalid page/)
+  assert.throws(() => bundleDirFor(out, 'BV1xx411c7mD', 'nope'), /invalid page/)
+  assert.equal(bundleDirFor(out, 'BV1xx411c7mD', 1), join(out, 'BV1xx411c7mD'))
+  assert.equal(bundleDirFor(out, 'BV1xx411c7mD', 3), join(out, 'BV1xx411c7mD', 'p3'))
 })
 
 test('writeTranscriptBundle removes stale part files after a larger repack', () => {
