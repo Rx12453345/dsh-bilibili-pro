@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4
+
+- Bcut ASR now downloads the DASH audio and uploads it in `per_size` parts instead of POSTing the signed audio URL. The old submit form was rejected with poll `state 3` after about two seconds; the upload path returned 74 segments for a 191 s video in 3.3 s, 738 for 30 min in 11 s, and 1,547 for 66 min in 30.3 s. The 10-minute limit was never real and is removed from the docs.
+- A progressive `durl` stream (video+audio) has no DASH audio track to upload: the tool reports that explicitly and suggests `provider: "faster-whisper"` instead of pretending to succeed.
+- `BILIBILI_COOKIE_FILE` now governs reads, QR-login writes and device-id persistence (previously only `$DSH_HOME/.env` was consulted for reads, so a login write and a request read could use different files).
+- A stored jar with only `buvid3`/`buvid4` is no longer discarded; `loadCredentials` returns it and reports `loggedIn` separately. Missing anonymous device ids are fetched from the SPI endpoint and merged into the jar, best-effort and without sending the session cookie.
+- `saveCookieFile` validates its options and requires an explicit source; the old `(path, cookies)` mistake can no longer silently overwrite the default file with an empty jar.
+- Login guidance and the `bilibili_login` description are path-based; `bilibili_series` and `bilibili_frames` document their sign-in requirements.
+- `pickLowestAudio` falls back to ascending stream `id` when no candidate advertises a usable bandwidth.
+
 ## 0.2.3
 
 - Retry only the Windows ffmpeg DLL-init failure (`0xC0000142` / `3221225794`) once.

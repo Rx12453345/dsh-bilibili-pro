@@ -100,8 +100,15 @@ test('bilibili_transcribe exposes the Bcut paged-transcript parameters', () => {
   assert.equal(typeof transcribe.parameters.properties.language.description, 'string')
   assert.equal(transcribe.parameters.properties.keep_audio, undefined)
   assert.match(transcribe.description, /Bcut/)
-  assert.match(transcribe.description, /ten minutes/)
+  assert.match(transcribe.description, /uploads it to Bcut in parts/)
+  assert.match(transcribe.description, /no known duration cap/)
+  assert.doesNotMatch(transcribe.description, /ten minutes/)
   assert.match(transcribe.description, /bilibili_asr_setup/)
+  // Frame capture and upload listings need a signed-in session.
+  const frames = tools().find((tool) => tool.name === 'bilibili_frames')
+  const series = tools().find((tool) => tool.name === 'bilibili_series')
+  assert.match(frames.description, /requires the stored sign-in/)
+  assert.match(series.description, /"uploads" needs the stored sign-in/)
 })
 
 test('bilibili_asr_setup exposes the runtime actions and modes', () => {

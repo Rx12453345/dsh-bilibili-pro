@@ -3,7 +3,7 @@ name: bilibili-video-analysis
 description: "Analyze a Bilibili video from its validated AI/CC subtitle track, or from Bilibili's Bcut (必剪) ASR when the video has no track (with an optional, user-approved faster-whisper runtime for audio Bcut rejects), with a lossless paged and searchable transcript and picture-driven frame capture through bilibili_frames, plus optional vision descriptions and citation hints when a local or OpenAI-compatible endpoint is configured. Annotates proper nouns and background that a reader cannot understand out of context. Use when the user shares a bilibili.com, b23.tv, or BV link and asks for a summary, notes, key points, a transcript, highlights, frames, or a written/HTML report; also use when only the subtitle text is wanted, when the transcript must be searched, or when a channel or series must be summarized in batch. Not for other video sites."
 metadata:
   author: dsh-zcode-plugins
-  version: "0.2.3"
+  version: "0.2.4"
 ---
 
 # B站视频汇总
@@ -19,9 +19,9 @@ metadata:
 | `bilibili_transcript_search` | 在文稿里做纯子串检索，返回时间、part 编号与上下文 |
 | `bilibili_frames` | 按显式 `timestamps` 定向抓帧，或自动场景变化 + 均匀补帧；返回帧图绝对路径与最近字幕；可选 `vision` 返回画面描述与 `citation_hint` |
 | `bilibili_video_info` | 元信息、字幕轨道清单、B站 AI 总结；**视频无字幕时默认附带评论区长评**（降级来源） |
-| `bilibili_transcribe` | 无字幕兜底：默认 B站必剪（Bcut）ASR，无需登录/本地模型；落盘同款分段 bundle（`source: "asr"`），默认返回 manifest + 第 1 段；实测只接受约 10 分钟以内的音频。Bcut 失败时复用已安装的 faster-whisper 运行时，没有则返回 `needs_asr_runtime` |
+| `bilibili_transcribe` | 无字幕兜底：默认 B站必剪（Bcut）ASR，无需登录/本地模型；先下载最低码率音轨再分片上传，长视频同样适用；落盘同款分段 bundle（`source: "asr"`），默认返回 manifest + 第 1 段；Bcut 失败时复用已安装的 faster-whisper 运行时，没有则返回 `needs_asr_runtime` |
 | `bilibili_asr_setup` | 可选 faster-whisper 运行时：`status` / `install` / `remove`，`mode: persistent \| temporary`；只有被调用时才安装，长期运行时删除需 `confirm: true` |
-| `bilibili_series` | 列 UP 的最近投稿 / 合集系列 / 合集内视频，用于批量任务 |
+| `bilibili_series` | 列 UP 的最近投稿 / 合集系列 / 合集内视频，用于批量任务；`uploads` 需要登录，`collections` / `videos` 匿名可用 |
 | `bilibili_login` | 扫码登录，Cookie 存到 `$DSH_HOME/bilibili-cookies.json` |
 
 ## 取内容：按顺序降级，不要跳步
@@ -33,8 +33,7 @@ metadata:
      - `strong`：命中关键词且覆盖 ≥ 50%，可直接使用。
      - `weak`：覆盖率 ≥ 70% 但关键词零命中（标题党或纯英文标题常见），可用，但要在文档里标注"弱校验"。
      - `fail`：段数不足、覆盖 < 50% 或 > 200%（多半是别的视频的字幕/被限流截断）→ **绝不采信**，继续降级或稍后重试。
-3. **无字幕** → `bilibili_transcribe({ url })`：默认走 B站必剪（Bcut）ASR，不需要登录、不下载音频、不用本地模型；它写的是和字幕工具同款的 `bili-out/<bvid>/` 分段 bundle（`source: "asr"`），默认返回 manifest + 第 1 段，之后照样用 `bilibili_transcript_part` / `bilibili_transcript_search`。**实测 Bcut 只接受约 10 分钟以内的音频**，更长的视频会被拒绝（poll 到 `state 3`）；被拒绝时不要反复重试。
-   - **如果 `bilibili_video_info.video.duration`（多P看 `page.duration`）超过 600 秒，在调用 Bcut 前主动告诉用户**：这超过 Bcut 的约 10 分钟上限，长视频可能被拒绝；有本地 faster-whisper 会继续，否则会返回安装选项。不要让用户干等，也不要在转写卡住后才解释。
+3. **无字幕** → `bilibili_transcribe({ url })`：默认走 B站必剪（Bcut）ASR，不需要登录、不需要本地模型；它会先把音轨下载到临时文件，再按 Bcut 返回的 `per_size` 分片上传（不需要 ffmpeg），长视频同样适用（实测 9 分钟、30 分钟、66 分钟均通过，没有已知时长上限）。写的是和字幕工具同款的 `bili-out/<bvid>/` 分段 bundle（`source: "asr"`），默认返回 manifest + 第 1 段，之后照样用 `bilibili_transcript_part` / `bilibili_transcript_search`。不要按视频时长预先劝阻用户。
 4. **Bcut 失败且返回 `status: "needs_asr_runtime"`** → 插件没有内置 faster-whisper 或模型，也**绝不自动安装**。把 `bcut_error` 和两种选择原样转达用户（模型首次本地转写需下载，`small` 约 500 MB）：
    - `persistent`：长期安装到 DSH home，venv+模型保留，之后所有视频复用；
    - `temporary`：只为当前视频安装在 `out_dir/.asr-runtime`，转写完成后自动删除。
@@ -42,7 +41,7 @@ metadata:
 5. **写 HTML**：读 `reference/template.html`，填充后写到 `bilibili/<bvid>/<slug>.html`；交付时用 `present` 给出文件卡片。
    - 如果启用了 vision，并且有 `citation_hint: "suitable"` 的帧，按“画面画廊”一节插入 1–2 张；没有合适画面就删除模板里的 `#frames` 整节。
 
-批量任务：`bilibili_series` 列出视频后，对其中每条重复第 1–5 步；一次只汇总用户点名的那几集，不要默默扩大范围。
+批量任务：`bilibili_series` 列出视频后，对其中每条重复第 1–5 步；一次只汇总用户点名的那几集，不要默默扩大范围。`kind: "uploads"` 需要登录（匿名返回 -101）；`collections` 与合集内 `videos` 匿名可用。
 
 ## 长文稿（分段 / 检索）
 
@@ -78,6 +77,8 @@ metadata:
 - 已有带 faster-whisper 的 Python 时，可由配置 `asrPython` 或环境变量 `BILIBILI_ASR_PYTHON`/`PYTHON` 指定，跳过安装。
 
 ## 抓帧 / 两段式
+
+`bilibili_frames` 通过 wbi `playurl` 取流，**需要已保存的登录态**（匿名请求返回 -101）；未登录时先 `bilibili_login { action: "start" }` → 扫码 → `{ action: "poll" }`。
 
 抓帧是**提示词驱动的两段式**，不是一上来就自动抓一堆图：
 

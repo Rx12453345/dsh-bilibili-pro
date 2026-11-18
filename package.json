@@ -1,6 +1,6 @@
 {
   "name": "dsh-bilibili-pro",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "Bilibili video analysis for DeepSeek Harness: validated subtitle track, paged/searchable transcript, picture-driven frame capture, and optional vision descriptions.",
   "license": "MIT",

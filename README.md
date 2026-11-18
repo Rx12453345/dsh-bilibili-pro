@@ -22,10 +22,10 @@ Bilibili hides AI subtitles from signed-out clients, so the plugin signs in thro
 | `bilibili_transcript_part` | Read one bounded part of the saved transcript by `part` or `cursor` (no re-fetch); `max_chars` repacks at another size and the returned cursor carries that packing |
 | `bilibili_transcript_search` | Literal keyword search over the saved transcript, returning the time, part number, and surrounding context of each hit |
 | `bilibili_video_info` | Metadata (title, UP, duration, description, stats, parts), the subtitle tracks the platform lists, Bilibili's own AI summary, and — when a video has no track — the comment section's long, well-liked "课代表" comments as a fallback source |
-| `bilibili_transcribe` | No-subtitle fallback: Bcut (必剪) ASR first — no local model, no sign-in, lowest-bitrate audio candidate. `provider: auto` falls back to an already-installed faster-whisper runtime; with none installed it returns `status: "needs_asr_runtime"` instead of writing an empty bundle |
+| `bilibili_transcribe` | No-subtitle fallback: Bcut (必剪) ASR first — no sign-in, no local model. Downloads the lowest-bitrate DASH audio and uploads it in parts (no ffmpeg); long videos are supported. `provider: auto` falls back to an already-installed faster-whisper runtime; with none installed it returns `status: "needs_asr_runtime"` instead of writing an empty bundle |
 | `bilibili_asr_setup` | The optional faster-whisper runtime: `status` / `install` / `remove`, `mode: persistent \| temporary`. Installs only when called; persistent removal needs `confirm: true` |
-| `bilibili_frames` | Capture JPEG frames at explicit moments or at automatic scene-change/even-interval points, with the nearest subtitle line and optional vision descriptions |
-| `bilibili_series` | List one UP's recent uploads, their collections (合集/系列), or the videos inside one collection, to plan batch work |
+| `bilibili_frames` | Capture JPEG frames at explicit moments or at automatic scene-change/even-interval points, with the nearest subtitle line and optional vision descriptions. Needs the stored sign-in (playurl answers -101 signed out) |
+| `bilibili_series` | List one UP's recent uploads, their collections (合集/系列), or the videos inside one collection, to plan batch work. Uploads need the stored sign-in; collections/videos work signed out |
 | `bilibili_login` | QR sign-in (`start` / `poll` / `status` / `logout`) |
 
 ![A generated summary report](https://raw.githubusercontent.com/Adamaik/dsh-zcode-plugins/main/packages/bilibili-summary/docs/preview.png)
@@ -60,7 +60,7 @@ bilibili_login { action: "start" }   # returns a QR PNG path to show you
 bilibili_login { action: "poll" }    # waits for the scan, saves the cookies
 ```
 
-Scan with the Bilibili mobile app (「我的」→「扫一扫」). The cookies land in `$DSH_HOME/bilibili-cookies.json` (mode `0600`). Alternatively, skip the QR flow and put a session cookie in `$DSH_HOME/.env`:
+Scan with the Bilibili mobile app (「我的」→「扫一扫」). The cookies land in `$DSH_HOME/bilibili-cookies.json` (mode `0600`). Cookie-file reads and writes both honour `BILIBILI_COOKIE_FILE` (process environment or `$DSH_HOME/.env`), so a QR login writes the file that subsequent requests actually read. If the jar has no anonymous device ids (`buvid3`/`buvid4`), the plugin fetches them from Bilibili's SPI endpoint and stores them alongside — this improves survival under risk control, but it is not a deterministic fix for every 412. Alternatively, skip the QR flow and put a session cookie in `$DSH_HOME/.env`:
 
 ```
 BILIBILI_SESSDATA=your_sessdata_value
@@ -98,7 +98,7 @@ Keyword matching covers CJK fragments (2–4 characters) and Latin tokens (3+ ch
 1. `bilibili_subtitles` — the real track.
 2. `bilibili_video_info` — Bilibili's own AI summary, plus the video description.
 3. `bilibili_video_info` with `comments` — long (≥ 200 chars), well-liked (≥ 3) comments; the "课代表" summary a viewer wrote by hand. Fetched automatically when the video has no track at all.
-4. `bilibili_transcribe` — Bcut (必剪) ASR: anonymous, model-free, and the default for no-subtitle videos. Bcut accepts only roughly 10 minutes of audio, so a longer no-subtitle video is rejected (poll state 3).
+4. `bilibili_transcribe` — Bcut (必剪) ASR: anonymous, model-free, and the default for no-subtitle videos. It downloads the lowest-bitrate DASH audio and uploads it in parts. Verified on 9-, 30- and 66-minute videos; no duration cap is observed or documented. If Bcut itself rejects the audio (poll `state 3`), the optional local fallback below is offered.
 5. Optional local fallback: if Bcut fails, `bilibili_transcribe` reuses an already-installed faster-whisper runtime. With none installed it returns `status: "needs_asr_runtime"` with the two install choices below — it never downloads on its own.
 
 Human-uploaded (CC) tracks are preferred over machine-generated ones for the same language, and every step that used a fallback marks the source in the report.
@@ -121,10 +121,10 @@ A transcript is full of names that mean nothing without context. The skill requi
 
 Videos whose subtitles are burned into the picture have no track to extract. `bilibili_transcribe` handles them:
 
-1. resolve the audio through `x/player/wbi/playurl` and pick the **lowest-bitrate** DASH candidate (Bcut accepts the low one when it rejects 212 kbps);
-2. submit it to Bcut (必剪). On success the result is shaped exactly like a subtitle track, marked as machine transcription (`source: "asr"`, `track.route: "bcut"`).
+1. resolve the audio through `x/player/wbi/playurl` and pick the **lowest-bitrate** DASH candidate (the upload path does not reject higher bitrates; the low one just keeps the temporary upload small);
+2. download it to a temporary file (the audio CDN needs the video-site Referer; no cookie is sent), upload it to Bcut (必剪) in parts, and poll for the result. On success the result is shaped exactly like a subtitle track, marked as machine transcription (`source: "asr"`, `track.route: "bcut"`). A progressive `durl` stream (video+audio) has no DASH audio track to upload, so that case reports an explicit error instead of pretending to succeed.
 
-Bcut rejects audio longer than roughly 10 minutes. For those videos the assistant can offer an **optional** faster-whisper fallback, with two explicit choices:
+Measured on 2026-11-18: a 191-second video produced 74 segments in 3.3 seconds (1 part, 1.24 MB); a 30-minute video produced 738 segments in 11 seconds (3 parts, 14.55 MB); a 66-minute video produced 1,547 segments / 70,895 characters in 30.3 seconds (7 parts, 30.95 MB). There is no 10-minute cap to work around. If Bcut rejects a particular audio (poll `state 3`, usually with an empty `remark`), the assistant can offer an **optional** faster-whisper fallback, with two explicit choices:
 
 - **persistent** — `bilibili_asr_setup { action: "install", mode: "persistent" }` creates `$DSH_HOME/bilibili-asr/{venv,models}`; the venv and downloaded model are kept and reused by every later video.
 - **temporary** — `bilibili_asr_setup { action: "install", mode: "temporary", out_dir: "..." }` creates `<out_dir>/.asr-runtime`; after the transcript bundle is written the venv and model are deleted. A temp state file under `$DSH_HOME/bilibili-asr` lets a later call find it even from another `out_dir`.
@@ -197,7 +197,7 @@ bilibili_series({ url: "https://space.bilibili.com/588699709", kind: "collection
 ## Limitations
 
 - Chinese-first: the default track is `ai-zh`; other languages work through `lang`.
-- Bcut is a Bilibili service with a practical limit of roughly 10 minutes of audio; longer no-subtitle videos need the optional local fallback (or another source such as Bilibili's AI summary / comment section).
+- Bcut is a Bilibili service. The chunked-upload path has no observed duration cap — 9-, 30- and 66-minute videos all succeeded — but Bilibili can still reject a particular audio (poll `state 3`); that rejection is what the optional local fallback covers.
 - The optional faster-whisper fallback is not bundled: it downloads a model on first local use, and transcription quality tracks the chosen model; `small` is a speed/accuracy compromise. Bcut output usually has no punctuation; faster-whisper adds punctuation but both can mis-hear homophones.
 - Bilibili rate-limits aggressively; a failed extraction is usually temporary.
 - Multi-part videos are summarized one part at a time through the `page` argument.

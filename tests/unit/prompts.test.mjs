@@ -39,12 +39,14 @@ test('the prompt covers multi-page, login and a missing ffmpeg', () => {
   assert.match(TWO_PASS_SYSTEM_PROMPT, /ffmpegPath/)
 })
 
-test('the prompt warns about no-subtitle videos longer than 10 minutes before Bcut', () => {
-  assert.match(TWO_PASS_SYSTEM_PROMPT, /video\.duration/)
-  assert.match(TWO_PASS_SYSTEM_PROMPT, /page\.duration/)
-  assert.match(TWO_PASS_SYSTEM_PROMPT, /600 秒/)
-  assert.match(TWO_PASS_SYSTEM_PROMPT, /先主动告诉用户/)
-  assert.match(TWO_PASS_SYSTEM_PROMPT, /10 分钟/)
+test('the prompt describes Bcut as a download-and-upload path without a fixed duration limit', () => {
+  assert.match(TWO_PASS_SYSTEM_PROMPT, /先下载音频再分片上传/)
+  assert.match(TWO_PASS_SYSTEM_PROMPT, /长视频同样适用/)
+  assert.match(TWO_PASS_SYSTEM_PROMPT, /state 3/)
+  assert.match(TWO_PASS_SYSTEM_PROMPT, /needs_asr_runtime/)
+  assert.doesNotMatch(TWO_PASS_SYSTEM_PROMPT, /10 分钟/)
+  assert.doesNotMatch(TWO_PASS_SYSTEM_PROMPT, /600 秒/)
+  assert.doesNotMatch(TWO_PASS_SYSTEM_PROMPT, /先主动告诉用户/)
 })
 
 test('the prompt does not promise unimplemented features', () => {

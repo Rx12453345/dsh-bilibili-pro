@@ -21,7 +21,12 @@ import { BCUT_API_BASE } from '../../lib/bcut.js'
 import { createBilibiliTools } from '../../lib/tools.js'
 
 const BVID = 'BV1xx411c7mD'
-const CREATE_URL = `${BCUT_API_BASE}/task`
+const RESOURCE_CREATE_URL = `${BCUT_API_BASE}/resource/create`
+const COMPLETE_URL = `${BCUT_API_BASE}/resource/create/complete`
+const TASK_URL = `${BCUT_API_BASE}/task`
+const UPLOAD_URL = 'https://upload.example.com/part-0?token=upload-secret'
+const DOWNLOAD_URL = 'https://bcut.example.com/resource.m4a?token=download-secret'
+const AUDIO_URL = 'https://cdn.example.com/audio-65k.m4s?token=secret'
 
 /** JSON response helper. */
 function jsonResponse(payload, status = 200) {
@@ -35,7 +40,7 @@ function jsonResponse(payload, status = 200) {
  * @returns counters the assertions can inspect.
  */
 function stubAsrFetch(mode) {
-  const state = { createCalls: 0, polls: 0 }
+  const state = { createCalls: 0, uploads: 0, polls: 0 }
   globalThis.fetch = async (url, init = {}) => {
     const href = String(url)
     if (href.startsWith('https://api.bilibili.com/x/web-interface/view')) {
@@ -73,15 +78,40 @@ function stubAsrFetch(mode) {
         code: 0,
         data: {
           dash: {
-            audio: [{ baseUrl: 'https://cdn.example.com/audio-65k.m4s?token=secret', bandwidth: 65_000, codecs: 'mp4a.40.2', id: 30216 }],
+            audio: [{ baseUrl: AUDIO_URL, bandwidth: 65_000, codecs: 'mp4a.40.2', id: 30216 }],
           },
         },
       })
     }
-    if (href === CREATE_URL) {
+    if (href === AUDIO_URL) {
+      return new Response(Buffer.from('ftypiso5-test-audio-bytes'), {
+        status: 200,
+        headers: { 'content-type': 'audio/mp4' },
+      })
+    }
+    if (href === RESOURCE_CREATE_URL) {
       state.createCalls += 1
       if (mode === 'unexpected') throw new Error('Bcut must not be called for provider=faster-whisper')
-      return jsonResponse({ code: 0, data: { task_id: `task-${state.createCalls}` } })
+      return jsonResponse({
+        code: 0,
+        data: {
+          upload_urls: [UPLOAD_URL],
+          per_size: 5_242_880,
+          in_boss_key: 'boss-key',
+          resource_id: 'resource-id',
+          upload_id: 'upload-id',
+        },
+      })
+    }
+    if (href === UPLOAD_URL) {
+      state.uploads += 1
+      return new Response('', { status: 200, headers: { etag: '"etag-1"' } })
+    }
+    if (href === COMPLETE_URL) {
+      return jsonResponse({ code: 0, data: { download_url: DOWNLOAD_URL } })
+    }
+    if (href === TASK_URL) {
+      return jsonResponse({ code: 0, data: { task_id: 'task-1' } })
     }
     if (href.startsWith(`${BCUT_API_BASE}/task/result`)) {
       state.polls += 1
@@ -148,7 +178,7 @@ test('Bcut failure without a runtime returns needs_asr_runtime and writes no bun
     assert.equal(result.provider, 'bcut')
     assert.match(result.bcut_error, /state 3/)
     assert.match(result.bcut_error, /音频过长/)
-    assert.match(result.bcut_error, /10 minutes|another provider|rejected/)
+    assert.match(result.bcut_error, /state 3|音频过长|rejected/)
     assert.deepEqual(result.options.map((option) => option.mode), ['persistent', 'temporary'])
     assert.equal(result.estimated_model_mb, 500)
     assert.ok(result.options.every((option) => typeof option.label === 'string' && option.label.length > 0))
@@ -238,6 +268,74 @@ test('provider=faster-whisper skips Bcut and returns the needs-setup result', as
     assert.deepEqual(result.options.map((option) => option.mode), ['persistent', 'temporary'])
     assert.equal(existsSync(join(tmp, 'out', BVID)), false)
     assert.equal(existsSync(asrBaseDir), false)
+  } finally {
+    globalThis.fetch = originalFetch
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('a durl-only stream is reported as unsupported on the Bcut path', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'dsh-bili-asr-fallback-'))
+  const originalFetch = globalThis.fetch
+  let playurlCalls = 0
+  globalThis.fetch = async (url) => {
+    const href = String(url)
+    if (href.startsWith('https://api.bilibili.com/x/web-interface/view')) {
+      return jsonResponse({
+        code: 0,
+        data: {
+          bvid: BVID,
+          aid: 42,
+          cid: 123,
+          title: '只有渐进流的视频',
+          desc: '测试简介',
+          duration: 300,
+          owner: { mid: 1, name: 'UP' },
+          stat: { view: 1, danmaku: 0, reply: 0, like: 0, coin: 0, favorite: 0, share: 0 },
+          pages: [],
+        },
+      })
+    }
+    if (href.startsWith('https://api.bilibili.com/x/web-interface/nav')) {
+      return jsonResponse({
+        code: 0,
+        data: {
+          isLogin: true,
+          wbi_img: {
+            img_url: 'https://i0.hdslb.com/bfs/wbi/0123456789abcdef0123456789abcdef.png',
+            sub_url: 'https://i0.hdslb.com/bfs/wbi/fedcba9876543210fedcba9876543210.png',
+          },
+        },
+      })
+    }
+    if (href.startsWith('https://api.bilibili.com/x/player/wbi/playurl')) {
+      playurlCalls += 1
+      return jsonResponse({
+        code: 0,
+        data: { durl: [{ url: 'https://cdn.example.com/progressive.mp4?token=secret' }] },
+      })
+    }
+    throw new Error(`unexpected fetch: ${href}`)
+  }
+  try {
+    const { tools } = toolsFor(tmp)
+    const transcribe = tools.find((tool) => tool.name === 'bilibili_transcribe')
+    await assert.rejects(
+      transcribe.execute({ url: BVID, provider: 'bcut', out_dir: 'out' }, execFor(tmp)),
+      (error) => {
+        assert.match(error.message, /progressive durl stream/)
+        assert.match(error.message, /DASH audio track/)
+        assert.match(error.message, /faster-whisper/)
+        assert.ok(!error.message.includes('progressive.mp4'))
+        return true
+      },
+    )
+    const auto = await transcribe.execute({ url: BVID, out_dir: 'out2' }, execFor(tmp))
+    assert.equal(auto.status, 'needs_asr_runtime')
+    assert.match(auto.bcut_error, /DASH audio track/)
+    assert.match(auto.bcut_error, /faster-whisper/)
+    assert.ok(!JSON.stringify(auto).includes('progressive.mp4'), 'the signed durl URL must not leak')
+    assert.equal(playurlCalls, 2, 'each attempt resolves the stream once and then stops')
   } finally {
     globalThis.fetch = originalFetch
     rmSync(tmp, { recursive: true, force: true })

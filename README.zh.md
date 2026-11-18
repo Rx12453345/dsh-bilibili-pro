@@ -20,10 +20,10 @@ B站 对未登录用户隐藏 AI 字幕，插件走官方扫码登录流程并�
 | `bilibili_transcript_part` | 按 `part` 或 `cursor` 读取已落盘文稿中的一段（无需重新抓字幕）；`max_chars` 可按另一尺寸重切，返回的 cursor 会带上该 packing |
 | `bilibili_transcript_search` | 在已落盘文稿里做纯子串检索，返回每处命中的时间、part 编号与上下文 |
 | `bilibili_video_info` | 视频元信息、字幕轨道列表、B站 AI 总结；**视频无字幕时自动附带评论区长评**（降级来源） |
-| `bilibili_transcribe` | 无字幕兜底：默认走 B站必剪（Bcut）ASR，无需登录、本地模型或音频下载，提交最低码率音轨；`provider: auto` 在 Bcut 失败时复用已安装的 faster-whisper 运行时，若没有则返回 `status: "needs_asr_runtime"`，不写空 bundle |
+| `bilibili_transcribe` | 无字幕兜底：默认走 B站必剪（Bcut）ASR，无需登录、无需本地模型。先下载最低码率 DASH 音轨，再分片上传（不需要 ffmpeg），长视频同样适用；`provider: auto` 在 Bcut 失败时复用已安装的 faster-whisper 运行时，若没有则返回 `status: "needs_asr_runtime"`，不写空 bundle |
 | `bilibili_asr_setup` | 可选 faster-whisper 运行时的 `status` / `install` / `remove`，`mode: persistent \| temporary`；只有被调用时才安装，删除长期运行时需要 `confirm: true` |
-| `bilibili_frames` | 按显式时间点或自动场景变化/均匀补帧抓取 JPEG，附最近字幕；可选视觉描述 |
-| `bilibili_series` | 列 UP 的最近投稿 / 合集系列 / 合集内视频，用于批量任务 |
+| `bilibili_frames` | 按显式时间点或自动场景变化/均匀补帧抓取 JPEG，附最近字幕；可选视觉描述。需要已保存的登录态（匿名请求 playurl 返回 -101） |
+| `bilibili_series` | 列 UP 的最近投稿 / 合集系列 / 合集内视频，用于批量任务。`uploads` 需要登录；`collections` / `videos` 匿名可用 |
 | `bilibili_login` | 扫码登录（`start` / `poll` / `status` / `logout`） |
 
 ![生成的汇总文档](https://raw.githubusercontent.com/Adamaik/dsh-zcode-plugins/main/packages/bilibili-summary/docs/preview.png)
@@ -59,7 +59,7 @@ bilibili_login { action: "start" }   # 返回二维码 PNG 路径，展示给你
 bilibili_login { action: "poll" }    # 等待扫码完成并保存 Cookie
 ```
 
-用 B站 手机 App（「我的」→「扫一扫」）扫码确认。Cookie 写入 `$DSH_HOME/bilibili-cookies.json`（权限 `0600`）。也可以跳过扫码，在 `$DSH_HOME/.env` 里直接给：
+用 B站 手机 App（「我的」→「扫一扫」）扫码确认。Cookie 写入 `$DSH_HOME/bilibili-cookies.json`（权限 `0600`）。Cookie 文件的读写都遵循 `BILIBILI_COOKIE_FILE`（进程环境或 `$DSH_HOME/.env`），扫码登录写的就是后续请求读取的那份文件。若 jar 里没有匿名设备号（`buvid3`/`buvid4`），插件会从 B站 SPI 接口取一次并一并落盘——这能提高风控网络下的存活率，但不是对 412 的确定性修复。也可以跳过扫码，在 `$DSH_HOME/.env` 里直接给：
 
 ```
 BILIBILI_SESSDATA=你的_sessdata
@@ -97,7 +97,7 @@ BILIBILI_SESSDATA=你的_sessdata
 1. `bilibili_subtitles` —— 真正的字幕轨道。
 2. `bilibili_video_info` —— B站 AI 总结 + 视频简介。
 3. `bilibili_video_info` 的 `comments` —— 长（≥200 字）、高赞（≥3）的评论；观众手写的「课代表」总结，视频无字幕时自动抓取。
-4. `bilibili_transcribe` —— B站必剪（Bcut）ASR：匿名、无需本地模型，是无字幕视频的默认方案。实测只接受约 10 分钟以内的音频，更长会被拒绝（poll state 3）。
+4. `bilibili_transcribe` —— B站必剪（Bcut）ASR：匿名、无需本地模型，是无字幕视频的默认方案。它会先下载最低码率 DASH 音轨再分片上传；实测 9 分钟、30 分钟、66 分钟均通过，没有观测到也没有文档化的时长上限。只有 Bcut 自身拒绝该音频（poll `state 3`）时，才会提供下面的可选本地兜底。
 5. 可选本地兜底：Bcut 失败后，`bilibili_transcribe` 会复用**已安装**的 faster-whisper 运行时；若没有，返回 `status: "needs_asr_runtime"` 与两种安装选择，**绝不自动下载**。
 
 同语言下**优先 UP 上传的 CC 字幕**而非 AI 字幕；任何走了降级的来源都会在报告里标注。
@@ -120,10 +120,10 @@ bilibili_subtitles({ url: "BV1TXHY6aETi", lang: "ai-zh", bilingual: "ai-en", for
 
 字幕被压制进画面的视频没有轨道可抽，用 `bilibili_transcribe`：
 
-1. 通过 `x/player/wbi/playurl` 取音轨，并选**最低码率**的 DASH 候选（Bcut 会拒绝 212 kbps，却接受 65 kbps）；
-2. 提交给 B站必剪（Bcut）。成功后输出形状与字幕轨道一致，并标注为机器转写（`source: "asr"`、`track.route: "bcut"`）。
+1. 通过 `x/player/wbi/playurl` 取音轨，并选**最低码率**的 DASH 候选（上传路径并不会因码率高被拒，选最低只为减小临时上传体积）；
+2. 把音轨下载到临时文件（音频 CDN 需要视频站 Referer，不发送 cookie），再分片上传给 B站必剪（Bcut）并轮询结果。成功后输出形状与字幕轨道一致，并标注为机器转写（`source: "asr"`、`track.route: "bcut"`）。渐进式 `durl`（带视频）没有可上传的 DASH 音轨，这种情况会明确报错，不会假装成功。
 
-Bcut 只接受约 10 分钟以内的音频。更长的无字幕视频可以由助手提供一个**可选**的 faster-whisper 兜底，两种方式由用户明确选择：
+实测（2026-11-18）：191 秒视频 1 个分片 / 1.24 MB，3.3 秒返回 74 段；30 分钟视频 3 个分片 / 14.55 MB，11 秒返回 738 段；66 分钟视频 7 个分片 / 30.95 MB，30.3 秒返回 1,547 段 / 70,895 字。不存在需要绕开的 10 分钟上限。如果 Bcut 仍然拒绝某个音频（poll `state 3`，通常 `remark` 为空），助手可以提供**可选**的 faster-whisper 兜底，两种方式由用户明确选择：
 
 - **长期安装（persistent）** —— `bilibili_asr_setup { action: "install", mode: "persistent" }` 在 `$DSH_HOME/bilibili-asr/{venv,models}` 安装一次，venv 与模型保留，之后的视频直接复用。
 - **临时安装（temporary）** —— `bilibili_asr_setup { action: "install", mode: "temporary", out_dir: "..." }` 安装在 `<out_dir>/.asr-runtime`；转写 bundle 写完后自动删除 venv 与模型。`$DSH_HOME/bilibili-asr` 下会保留一个临时状态文件，因此换一个 `out_dir` 也能找到它。
@@ -196,7 +196,7 @@ bilibili_series({ url: "https://space.bilibili.com/588699709", kind: "collection
 ## 已知限制
 
 - 以中文优先：默认轨道 `ai-zh`，其它语言用 `lang` 指定。
-- Bcut 是 B站 的服务，实测约 10 分钟音频的上限；更长的无字幕视频需要可选本地兜底（或改用 B站 AI 总结 / 评论区长评）。
+- Bcut 是 B站 的服务。分片上传路径没有观测到时长上限——9、30、66 分钟的视频都通过——但 B站 仍可能拒绝某个具体音频（poll `state 3`），这时才需要可选本地兜底。
 - 可选 faster-whisper 兜底不随插件打包：首次本地使用要下载模型，转写质量取决于模型规格；`small` 是速度与准确度的折中。Bcut 输出通常没有标点；faster-whisper 会带标点，但两者都可能出现同音错字。
 - B站 限流较严，抽取失败通常是暂时的。
 - 多分P视频按 `page` 参数一集一集处理。

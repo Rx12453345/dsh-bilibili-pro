@@ -2,9 +2,10 @@
  * Bcut ASR integration test: no network.
  *
  * Stubs video metadata, the WBI nav keys, playurl (three DASH audio candidates
- * from high to low) and the Bcut create/result endpoints, then runs the real
- * tools against a temporary output directory. The assertion that matters most:
- * the lowest-bandwidth candidate — not the top one — is submitted to Bcut.
+ * from high to low), the audio download, and the Bcut resource/task endpoints,
+ * then runs the real tools against a temporary output directory. The assertion
+ * that matters most: the lowest-bandwidth candidate — not the top one — is
+ * downloaded for the upload pipeline.
  */
 
 import { test } from 'node:test'
@@ -17,7 +18,11 @@ import { createBilibiliTools } from '../../lib/tools.js'
 
 const BVID = 'BV1xx411c7mD'
 const UNIQUE = '唯一必剪关键词'
-const CREATE_URL = `${BCUT_API_BASE}/task`
+const RESOURCE_CREATE_URL = `${BCUT_API_BASE}/resource/create`
+const COMPLETE_URL = `${BCUT_API_BASE}/resource/create/complete`
+const TASK_URL = `${BCUT_API_BASE}/task`
+const UPLOAD_URL = 'https://upload.example.com/part-0?token=upload-secret'
+const DOWNLOAD_URL = 'https://bcut.example.com/resource.m4a?token=download-secret'
 const AUDIO = {
   high: 'https://cdn.example.com/audio-212k.m4s?token=high-secret',
   mid: 'https://cdn.example.com/audio-113k.m4s?token=mid-secret',
@@ -45,7 +50,7 @@ function utterances() {
 
 /** Install the fetch stub; returns the state the test can inspect and change. */
 function stubAsrFetch() {
-  const state = { submitted: [], createCalls: 0, polls: 0 }
+  const state = { downloaded: [], createCalls: 0, uploads: 0, completeCalls: 0, taskResources: [], polls: 0 }
   globalThis.fetch = async (url, init = {}) => {
     const href = String(url)
     if (href.startsWith('https://api.bilibili.com/x/web-interface/view')) {
@@ -92,10 +97,37 @@ function stubAsrFetch() {
         },
       })
     }
-    if (href === CREATE_URL) {
+    if (href === AUDIO.low || href === AUDIO.mid || href === AUDIO.high) {
+      state.downloaded.push(href)
+      return new Response(Buffer.from('ftypiso5-test-audio-bytes'), {
+        status: 200,
+        headers: { 'content-type': 'audio/mp4' },
+      })
+    }
+    if (href === RESOURCE_CREATE_URL) {
       state.createCalls += 1
-      state.submitted.push(JSON.parse(init.body).resource)
-      return jsonResponse({ code: 0, data: { task_id: `task-${state.createCalls}` } })
+      return jsonResponse({
+        code: 0,
+        data: {
+          upload_urls: [UPLOAD_URL],
+          per_size: 5_242_880,
+          in_boss_key: 'boss-key',
+          resource_id: 'resource-id',
+          upload_id: 'upload-id',
+        },
+      })
+    }
+    if (href === UPLOAD_URL) {
+      state.uploads += 1
+      return new Response('', { status: 200, headers: { etag: '"etag-1"' } })
+    }
+    if (href === COMPLETE_URL) {
+      state.completeCalls += 1
+      return jsonResponse({ code: 0, data: { download_url: DOWNLOAD_URL } })
+    }
+    if (href === TASK_URL) {
+      state.taskResources.push(JSON.parse(init.body).resource)
+      return jsonResponse({ code: 0, data: { task_id: 'task-1' } })
     }
     if (href.startsWith(`${BCUT_API_BASE}/task/result`)) {
       state.polls += 1
@@ -129,7 +161,7 @@ function toolsFor(tmp) {
   })
 }
 
-test('Bcut transcription submits the lowest audio candidate and writes a paged asr bundle', async () => {
+test('Bcut transcription downloads the lowest audio candidate and writes a paged asr bundle', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'dsh-bili-pro-asr-'))
   const originalFetch = globalThis.fetch
   const state = stubAsrFetch()
@@ -143,7 +175,10 @@ test('Bcut transcription submits the lowest audio candidate and writes a paged a
 
     const result = await transcribe.execute({ url: BVID, out_dir: 'out-asr' }, exec)
     assert.equal(state.createCalls, 1)
-    assert.deepEqual(state.submitted, [AUDIO.low], 'Bcut must receive the lowest-bandwidth candidate')
+    assert.deepEqual(state.downloaded, [AUDIO.low], 'Bcut must receive the lowest-bandwidth candidate')
+    assert.equal(state.uploads, 1, 'the audio must be uploaded in parts')
+    assert.equal(state.completeCalls, 1)
+    assert.deepEqual(state.taskResources, [DOWNLOAD_URL], 'the task must point at the uploaded resource')
     assert.equal(result.source, 'asr')
     assert.deepEqual(result.asr, { provider: 'bcut' })
     assert.equal(result.manifest.source, 'asr')
