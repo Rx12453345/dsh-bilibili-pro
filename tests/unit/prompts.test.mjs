@@ -43,6 +43,8 @@ test('the prompt describes Bcut as a download-and-upload path without a fixed du
   assert.match(TWO_PASS_SYSTEM_PROMPT, /先下载音频再分片上传/)
   assert.match(TWO_PASS_SYSTEM_PROMPT, /长视频同样适用/)
   assert.match(TWO_PASS_SYSTEM_PROMPT, /state 3/)
+  assert.match(TWO_PASS_SYSTEM_PROMPT, /音频下载/)
+  assert.doesNotMatch(TWO_PASS_SYSTEM_PROMPT, /只有 Bcut 明确拒绝/)
   assert.match(TWO_PASS_SYSTEM_PROMPT, /needs_asr_runtime/)
   assert.doesNotMatch(TWO_PASS_SYSTEM_PROMPT, /10 分钟/)
   assert.doesNotMatch(TWO_PASS_SYSTEM_PROMPT, /600 秒/)

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-> dsh-bilibili-pro 0.2.3: validated AI/CC subtitles with a lossless, disk-backed
+> dsh-bilibili-pro 0.2.5: validated AI/CC subtitles with a lossless, disk-backed
 > transcript pagination layer (`parts`, cursor, time index, gaps) plus keyword
 > search, picture-driven frame capture with optional vision descriptions, and a
 > no-subtitle ASR chain: **Bcut (必剪) first**, with an **optional** on-demand
@@ -44,10 +44,10 @@ cd dsh-bilibili-pro
 npm install
 mkdir -p dist
 npm pack --pack-destination dist
-dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-0.2.3.tgz
+dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-<version>.tgz
 ```
 
-Keep `dist/` after installing: the profile records the tarball path.
+`npm pack` names the tarball after the version in `package.json` and prints the filename it wrote (for example `dsh-bilibili-pro-0.2.5.tgz`); replace `dsh-bilibili-pro-<version>.tgz` with that filename. Keep `dist/` after installing: the profile records the tarball path.
 
 On the desktop app, **Settings → Plugins → install from a local tarball** can be used instead of the CLI command. Keep FFmpeg on `PATH` for frame capture and local audio conversion.
 
@@ -98,7 +98,7 @@ Keyword matching covers CJK fragments (2–4 characters) and Latin tokens (3+ ch
 1. `bilibili_subtitles` — the real track.
 2. `bilibili_video_info` — Bilibili's own AI summary, plus the video description.
 3. `bilibili_video_info` with `comments` — long (≥ 200 chars), well-liked (≥ 3) comments; the "课代表" summary a viewer wrote by hand. Fetched automatically when the video has no track at all.
-4. `bilibili_transcribe` — Bcut (必剪) ASR: anonymous, model-free, and the default for no-subtitle videos. It downloads the lowest-bitrate DASH audio and uploads it in parts. Verified on 9-, 30- and 66-minute videos; no duration cap is observed or documented. If Bcut itself rejects the audio (poll `state 3`), the optional local fallback below is offered.
+4. `bilibili_transcribe` — Bcut (必剪) ASR: anonymous, model-free, and the default for no-subtitle videos. It downloads the lowest-bitrate DASH audio and uploads it in parts. Verified on 9-, 30- and 66-minute videos; no duration cap is observed or documented. If Bcut fails (audio download, part upload, or poll `state 3`), the optional local fallback below is offered.
 5. Optional local fallback: if Bcut fails, `bilibili_transcribe` reuses an already-installed faster-whisper runtime. With none installed it returns `status: "needs_asr_runtime"` with the two install choices below — it never downloads on its own.
 
 Human-uploaded (CC) tracks are preferred over machine-generated ones for the same language, and every step that used a fallback marks the source in the report.
@@ -124,7 +124,7 @@ Videos whose subtitles are burned into the picture have no track to extract. `bi
 1. resolve the audio through `x/player/wbi/playurl` and pick the **lowest-bitrate** DASH candidate (the upload path does not reject higher bitrates; the low one just keeps the temporary upload small);
 2. download it to a temporary file (the audio CDN needs the video-site Referer; no cookie is sent), upload it to Bcut (必剪) in parts, and poll for the result. On success the result is shaped exactly like a subtitle track, marked as machine transcription (`source: "asr"`, `track.route: "bcut"`). A progressive `durl` stream (video+audio) has no DASH audio track to upload, so that case reports an explicit error instead of pretending to succeed.
 
-Measured on 2026-11-18: a 191-second video produced 74 segments in 3.3 seconds (1 part, 1.24 MB); a 30-minute video produced 738 segments in 11 seconds (3 parts, 14.55 MB); a 66-minute video produced 1,547 segments / 70,895 characters in 30.3 seconds (7 parts, 30.95 MB). There is no 10-minute cap to work around. If Bcut rejects a particular audio (poll `state 3`, usually with an empty `remark`), the assistant can offer an **optional** faster-whisper fallback, with two explicit choices:
+Measured on 2026-11-18: a 191-second video produced 74 segments in 3.3 seconds (1 part, 1.24 MB); a 30-minute video produced 738 segments in 11 seconds (3 parts, 14.55 MB); a 66-minute video produced 1,547 segments / 70,895 characters in 30.3 seconds (7 parts, 30.95 MB). There is no 10-minute cap to work around. If Bcut fails on a particular audio (audio download, part upload, or poll `state 3` — the last usually with an empty `remark`), the assistant can offer an **optional** faster-whisper fallback, with two explicit choices:
 
 - **persistent** — `bilibili_asr_setup { action: "install", mode: "persistent" }` creates `$DSH_HOME/bilibili-asr/{venv,models}`; the venv and downloaded model are kept and reused by every later video.
 - **temporary** — `bilibili_asr_setup { action: "install", mode: "temporary", out_dir: "..." }` creates `<out_dir>/.asr-runtime`; after the transcript bundle is written the venv and model are deleted. A temp state file under `$DSH_HOME/bilibili-asr` lets a later call find it even from another `out_dir`.

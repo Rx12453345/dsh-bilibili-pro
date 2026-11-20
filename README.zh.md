@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-> dsh-bilibili-pro 0.2.3：在 `dsh-bilibili-summary` 0.1.3 的底座上新增无损落盘文稿
+> dsh-bilibili-pro 0.2.5：在 `dsh-bilibili-summary` 0.1.3 的底座上新增无损落盘文稿
 > 分段（`parts`、cursor、时间索引、缺口）与关键词检索、提示词驱动的定向抓帧与可选
 > 视觉描述，以及无字幕视频的 ASR 链：**优先 B站必剪（Bcut）**，并提供**可选的**
 > 按需 faster-whisper 兜底。插件**不内置** faster-whisper、虚拟环境或模型。两个
@@ -42,10 +42,10 @@ cd dsh-bilibili-pro
 npm install
 mkdir -p dist
 npm pack --pack-destination dist
-dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-0.2.3.tgz
+dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-<version>.tgz
 ```
 
-安装后请保留 `dist/`：profile 记录的是 tarball 路径。
+`npm pack` 会按 `package.json` 里的版本号命名 tarball，并把写出的文件名打印出来（例如 `dsh-bilibili-pro-0.2.5.tgz`）；把命令里的 `dsh-bilibili-pro-<version>.tgz` 换成那个文件名即可。安装后请保留 `dist/`：profile 记录的是 tarball 路径。
 
 桌面 App 也可以不用 CLI，直接在 **设置 → 插件 → 从本地 tarball 安装**。抓帧和本地音频转码需要
 系统 `PATH` 上有 FFmpeg。
@@ -97,7 +97,7 @@ BILIBILI_SESSDATA=你的_sessdata
 1. `bilibili_subtitles` —— 真正的字幕轨道。
 2. `bilibili_video_info` —— B站 AI 总结 + 视频简介。
 3. `bilibili_video_info` 的 `comments` —— 长（≥200 字）、高赞（≥3）的评论；观众手写的「课代表」总结，视频无字幕时自动抓取。
-4. `bilibili_transcribe` —— B站必剪（Bcut）ASR：匿名、无需本地模型，是无字幕视频的默认方案。它会先下载最低码率 DASH 音轨再分片上传；实测 9 分钟、30 分钟、66 分钟均通过，没有观测到也没有文档化的时长上限。只有 Bcut 自身拒绝该音频（poll `state 3`）时，才会提供下面的可选本地兜底。
+4. `bilibili_transcribe` —— B站必剪（Bcut）ASR：匿名、无需本地模型，是无字幕视频的默认方案。它会先下载最低码率 DASH 音轨再分片上传；实测 9 分钟、30 分钟、66 分钟均通过，没有观测到也没有文档化的时长上限。Bcut 失败（音频下载、分片上传失败，或 poll `state 3`）时，才会提供下面的可选本地兜底。
 5. 可选本地兜底：Bcut 失败后，`bilibili_transcribe` 会复用**已安装**的 faster-whisper 运行时；若没有，返回 `status: "needs_asr_runtime"` 与两种安装选择，**绝不自动下载**。
 
 同语言下**优先 UP 上传的 CC 字幕**而非 AI 字幕；任何走了降级的来源都会在报告里标注。
@@ -123,7 +123,7 @@ bilibili_subtitles({ url: "BV1TXHY6aETi", lang: "ai-zh", bilingual: "ai-en", for
 1. 通过 `x/player/wbi/playurl` 取音轨，并选**最低码率**的 DASH 候选（上传路径并不会因码率高被拒，选最低只为减小临时上传体积）；
 2. 把音轨下载到临时文件（音频 CDN 需要视频站 Referer，不发送 cookie），再分片上传给 B站必剪（Bcut）并轮询结果。成功后输出形状与字幕轨道一致，并标注为机器转写（`source: "asr"`、`track.route: "bcut"`）。渐进式 `durl`（带视频）没有可上传的 DASH 音轨，这种情况会明确报错，不会假装成功。
 
-实测（2026-11-18）：191 秒视频 1 个分片 / 1.24 MB，3.3 秒返回 74 段；30 分钟视频 3 个分片 / 14.55 MB，11 秒返回 738 段；66 分钟视频 7 个分片 / 30.95 MB，30.3 秒返回 1,547 段 / 70,895 字。不存在需要绕开的 10 分钟上限。如果 Bcut 仍然拒绝某个音频（poll `state 3`，通常 `remark` 为空），助手可以提供**可选**的 faster-whisper 兜底，两种方式由用户明确选择：
+实测（2026-11-18）：191 秒视频 1 个分片 / 1.24 MB，3.3 秒返回 74 段；30 分钟视频 3 个分片 / 14.55 MB，11 秒返回 738 段；66 分钟视频 7 个分片 / 30.95 MB，30.3 秒返回 1,547 段 / 70,895 字。不存在需要绕开的 10 分钟上限。如果 Bcut 处理某个音频时失败（音频下载、分片上传失败，或 poll `state 3`，最后一种通常 `remark` 为空），助手可以提供**可选**的 faster-whisper 兜底，两种方式由用户明确选择：
 
 - **长期安装（persistent）** —— `bilibili_asr_setup { action: "install", mode: "persistent" }` 在 `$DSH_HOME/bilibili-asr/{venv,models}` 安装一次，venv 与模型保留，之后的视频直接复用。
 - **临时安装（temporary）** —— `bilibili_asr_setup { action: "install", mode: "temporary", out_dir: "..." }` 安装在 `<out_dir>/.asr-runtime`；转写 bundle 写完后自动删除 venv 与模型。`$DSH_HOME/bilibili-asr` 下会保留一个临时状态文件，因此换一个 `out_dir` 也能找到它。
