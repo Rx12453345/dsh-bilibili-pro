@@ -58,7 +58,8 @@ test('two-hour transcript pages losslessly, round-trips on disk, and searches ba
   try {
     const { segments, keywordTime } = buildFixture()
     const text = toPlainText(segments)
-    assert.ok(text.length > 90_000, `fixture text should be about 100k chars, got ${text.length}`)
+    const raw = segments.map((segment) => segment.text).join('')
+    assert.ok(raw.length > 90_000, `fixture text should be about 100k chars, got ${raw.length}`)
     assert.ok(keywordTime !== undefined)
 
     const maxChars = 3000
@@ -70,8 +71,8 @@ test('two-hour transcript pages losslessly, round-trips on disk, and searches ba
     }
     assert.equal(
       parts.flatMap((part) => part.segments.map((segment) => segment.text)).join(''),
-      text,
-      'concatenating every part must reproduce the transcript exactly',
+      raw,
+      'concatenating every part must reproduce the source text exactly',
     )
 
     const gaps = transcriptGaps(segments, { minGapSeconds: 10 })
@@ -118,7 +119,7 @@ test('two-hour transcript pages losslessly, round-trips on disk, and searches ba
 
     const read = readTranscriptBundle({ outDir: tmp, bvid: video.bvid, page: 1 })
     assert.ok(read)
-    assert.equal(read.manifest.stats.chars, text.length)
+    assert.equal(read.manifest.stats.chars, raw.length)
     assert.equal(read.manifest.stats.segments, segments.length)
     assert.equal(read.manifest.stats.parts, parts.length)
     assert.equal(read.manifest.stats.gaps, gaps.length)

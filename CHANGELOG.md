@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Transcript assembly no longer glues adjacent English ASR segments together. `joinSegments()` inserts one space only when an ASCII word character follows another ASCII word character or closing punctuation (`. , ; : ! ? % ) ] } ' "`), and leaves CJK/CJK, CJK/English, English/CJK and punctuation/CJK boundaries verbatim. `groupSegments()` and `toPlainText()` now use it.
+- `groupSegments()` records `count` per block, the number of source segments it covers; the character budget is enforced on the joined text. `packParts()` maps blocks back with that count instead of matching character lengths; the old character walk would have shifted every later range by one inserted space.
+- `packParts()` splits oversized blocks at segment boundaries and joins the pieces with the same rule. Slices of one split segment are concatenated verbatim, so an English word is never cut by an invented space.
+- `stats.chars` and `part.chars` still count **content characters**: the sum of the raw segment texts, without inserted separators. `transcript.json.text` can therefore be a few characters longer than `stats.chars`; the JSON `segments` remain losslessly reconstructible, and `packParts()` still emits every source segment that has text exactly once, in order.
+- The optional faster-whisper fallback is now described as covering every Bcut failure — audio download, chunked upload, or poll `state 3` — instead of only a rejected poll, in both READMEs, the registered skill description (`index.js`), `NOTICE` and the `lib/asr.js` module note.
+- Both README version banners now read 0.3.0, and the install example uses the tarball name `npm pack` writes for this version.
+
 ## 0.2.5
 
 - The README version banners now read 0.2.5, and the install command uses the tarball name `npm pack` writes instead of a version hard-coded in the docs.

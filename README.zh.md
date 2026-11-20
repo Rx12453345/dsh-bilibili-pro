@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-> dsh-bilibili-pro 0.2.5：在 `dsh-bilibili-summary` 0.1.3 的底座上新增无损落盘文稿
+> dsh-bilibili-pro 0.3.0：在 `dsh-bilibili-summary` 0.1.3 的底座上新增无损落盘文稿
 > 分段（`parts`、cursor、时间索引、缺口）与关键词检索、提示词驱动的定向抓帧与可选
 > 视觉描述，以及无字幕视频的 ASR 链：**优先 B站必剪（Bcut）**，并提供**可选的**
 > 按需 faster-whisper 兜底。插件**不内置** faster-whisper、虚拟环境或模型。两个
@@ -45,7 +45,7 @@ npm pack --pack-destination dist
 dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-<version>.tgz
 ```
 
-`npm pack` 会按 `package.json` 里的版本号命名 tarball，并把写出的文件名打印出来（例如 `dsh-bilibili-pro-0.2.5.tgz`）；把命令里的 `dsh-bilibili-pro-<version>.tgz` 换成那个文件名即可。安装后请保留 `dist/`：profile 记录的是 tarball 路径。
+`npm pack` 会按 `package.json` 里的版本号命名 tarball，并把写出的文件名打印出来（例如 `dsh-bilibili-pro-0.3.0.tgz`）；把命令里的 `dsh-bilibili-pro-<version>.tgz` 换成那个文件名即可。安装后请保留 `dist/`：profile 记录的是 tarball 路径。
 
 桌面 App 也可以不用 CLI，直接在 **设置 → 插件 → 从本地 tarball 安装**。抓帧和本地音频转码需要
 系统 `PATH` 上有 FFmpeg。
@@ -196,7 +196,7 @@ bilibili_series({ url: "https://space.bilibili.com/588699709", kind: "collection
 ## 已知限制
 
 - 以中文优先：默认轨道 `ai-zh`，其它语言用 `lang` 指定。
-- Bcut 是 B站 的服务。分片上传路径没有观测到时长上限——9、30、66 分钟的视频都通过——但 B站 仍可能拒绝某个具体音频（poll `state 3`），这时才需要可选本地兜底。
+- Bcut 是 B站 的服务。分片上传路径没有观测到时长上限——9、30、66 分钟的视频都通过——但某个具体音频仍可能失败：音频下载失败、分片上传失败，或 poll 到 `state 3`。这三种失败都由可选本地兜底覆盖。
 - 可选 faster-whisper 兜底不随插件打包：首次本地使用要下载模型，转写质量取决于模型规格；`small` 是速度与准确度的折中。Bcut 输出通常没有标点；faster-whisper 会带标点，但两者都可能出现同音错字。
 - B站 限流较严，抽取失败通常是暂时的。
 - 多分P视频按 `page` 参数一集一集处理。

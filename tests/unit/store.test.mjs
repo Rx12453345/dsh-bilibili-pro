@@ -78,13 +78,48 @@ test('writeTranscriptBundle writes the documented layout and reads back lossless
     assert.ok(read)
     assert.equal(read.baseDir, written.baseDir)
     assert.equal(read.manifest.parts.length, data.parts.length)
-    assert.equal(read.manifest.stats.chars, toPlainText(data.segments).length)
+    assert.equal(read.manifest.stats.chars, data.segments.reduce((sum, segment) => sum + segment.text.length, 0))
     assert.equal(read.manifest.stats.parts, data.parts.length)
     assert.equal(read.transcript.text, toPlainText(data.segments))
     assert.equal(read.parts.length, data.parts.length)
     assert.equal(read.parts[0].segments[0].text, data.segments[0].text)
     assert.equal(read.meta.files.transcript_json, written.files.transcript_json)
     assert.ok(read.meta.generated_at)
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('writeTranscriptBundle records content chars while text gains separator spaces', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'dsh-bili-pro-'))
+  try {
+    const segments = Array.from({ length: 120 }, (_, index) => ({
+      from: index * 2,
+      to: index * 2 + 2,
+      text: index % 2 === 0 ? `word${index}` : 'and more',
+    }))
+    const outDir = join(tmp, 'bili-out')
+    const contentChars = segments.reduce((sum, segment) => sum + segment.text.length, 0)
+    const written = writeTranscriptBundle({
+      video: { bvid: 'BV1xx411c7mD', title: 'English fixture', duration: 240, url: 'https://www.bilibili.com/video/BV1xx411c7mD' },
+      page: { page: 1 },
+      track: { lan: 'ai-en', lan_doc: 'English' },
+      segments,
+      parts: packParts(segments, { maxChars: 6000, maxSeconds: 600 }),
+      index: [],
+      gaps: [],
+      outDir,
+      bvid: 'BV1xx411c7mD',
+      source: 'asr',
+    })
+    const transcript = JSON.parse(readFileSync(written.files.transcript_json, 'utf8'))
+    assert.equal(written.manifest.stats.chars, contentChars)
+    assert.equal(transcript.stats.chars, contentChars)
+    assert.equal(transcript.text, toPlainText(segments))
+    assert.ok(transcript.text.length > contentChars, 'the inserted spaces make text slightly longer')
+    assert.match(transcript.text, /word0 and more word2/)
+    const read = readTranscriptBundle({ outDir, bvid: 'BV1xx411c7mD', page: 1 })
+    assert.equal(read.parts.flatMap((part) => part.segments.map((segment) => segment.text)).join(''), segments.map((segment) => segment.text).join(''))
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }

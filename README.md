@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-> dsh-bilibili-pro 0.2.5: validated AI/CC subtitles with a lossless, disk-backed
+> dsh-bilibili-pro 0.3.0: validated AI/CC subtitles with a lossless, disk-backed
 > transcript pagination layer (`parts`, cursor, time index, gaps) plus keyword
 > search, picture-driven frame capture with optional vision descriptions, and a
 > no-subtitle ASR chain: **Bcut (必剪) first**, with an **optional** on-demand
@@ -47,7 +47,7 @@ npm pack --pack-destination dist
 dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-<version>.tgz
 ```
 
-`npm pack` names the tarball after the version in `package.json` and prints the filename it wrote (for example `dsh-bilibili-pro-0.2.5.tgz`); replace `dsh-bilibili-pro-<version>.tgz` with that filename. Keep `dist/` after installing: the profile records the tarball path.
+`npm pack` names the tarball after the version in `package.json` and prints the filename it wrote (for example `dsh-bilibili-pro-0.3.0.tgz`); replace `dsh-bilibili-pro-<version>.tgz` with that filename. Keep `dist/` after installing: the profile records the tarball path.
 
 On the desktop app, **Settings → Plugins → install from a local tarball** can be used instead of the CLI command. Keep FFmpeg on `PATH` for frame capture and local audio conversion.
 
@@ -197,7 +197,7 @@ bilibili_series({ url: "https://space.bilibili.com/588699709", kind: "collection
 ## Limitations
 
 - Chinese-first: the default track is `ai-zh`; other languages work through `lang`.
-- Bcut is a Bilibili service. The chunked-upload path has no observed duration cap — 9-, 30- and 66-minute videos all succeeded — but Bilibili can still reject a particular audio (poll `state 3`); that rejection is what the optional local fallback covers.
+- Bcut is a Bilibili service. The chunked-upload path has no observed duration cap — 9-, 30- and 66-minute videos all succeeded — but a particular audio can still fail: the audio download, a chunked upload, or the poll (`state 3`). Any of those failures is what the optional local fallback covers.
 - The optional faster-whisper fallback is not bundled: it downloads a model on first local use, and transcription quality tracks the chosen model; `small` is a speed/accuracy compromise. Bcut output usually has no punctuation; faster-whisper adds punctuation but both can mis-hear homophones.
 - Bilibili rate-limits aggressively; a failed extraction is usually temporary.
 - Multi-part videos are summarized one part at a time through the `page` argument.

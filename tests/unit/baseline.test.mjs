@@ -31,7 +31,7 @@ test('groupSegments merges short lines into one block', () => {
   ]
   const blocks = groupSegments(segments)
   assert.equal(blocks.length, 1)
-  assert.deepEqual(blocks[0], { from: 0, to: 20, text: '你好，世界' })
+  assert.deepEqual(blocks[0], { from: 0, to: 20, text: '你好，世界', count: 2 })
 })
 
 test('groupSegments starts a new block at the duration budget', () => {
@@ -43,7 +43,9 @@ test('groupSegments starts a new block at the duration budget', () => {
   const blocks = groupSegments(segments, { targetSeconds: 25 })
   assert.equal(blocks.length, 2)
   assert.equal(blocks[0].text, 'a')
-  assert.equal(blocks[1].text, 'bc')
+  assert.equal(blocks[0].count, 1)
+  assert.equal(blocks[1].text, 'b c')
+  assert.equal(blocks[1].count, 2)
 })
 
 test('toPlainText joins every segment without timestamps', () => {

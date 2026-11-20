@@ -14,6 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { BCUT_API_BASE } from '../../lib/bcut.js'
+import { joinSegments } from '../../lib/transcript.js'
 import { createBilibiliTools } from '../../lib/tools.js'
 
 const BVID = 'BV1xx411c7mD'
@@ -245,7 +246,7 @@ test('Bcut transcription downloads the lowest audio candidate and writes a paged
 
     const legacy = await transcribe.execute({ url: BVID, legacy_full: true, out_dir: 'out-legacy' }, exec)
     assert.equal(legacy.segments.length, 130)
-    assert.equal(legacy.transcript, utterances().map((utterance) => utterance.transcript).join(''))
+    assert.equal(legacy.transcript, joinSegments(utterances().map((utterance) => utterance.transcript)))
     assert.ok(Array.isArray(legacy.timeline) && legacy.timeline.length > 0)
     assert.ok(legacy.timeline.every((block) => block.url.includes('?t=')))
     assert.ok(legacy.manifest.stats.parts >= 2)

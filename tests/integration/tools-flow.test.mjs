@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
+import { joinSegments } from '../../lib/transcript.js'
 import { createBilibiliTools } from '../../lib/tools.js'
 
 const BVID = 'BV1xx411c7mD'
@@ -78,6 +79,7 @@ test('migrated tools return manifest + one part, page, repack and search offline
   const originalFetch = globalThis.fetch
   const body = subtitleBody()
   const expectedText = body.map((entry) => entry.content).join('')
+  const expectedPlain = joinSegments(body.map((entry) => entry.content))
   globalThis.fetch = async (url) => {
     const href = String(url)
     if (href.startsWith('https://api.bilibili.com/x/web-interface/view')) {
@@ -216,7 +218,7 @@ test('migrated tools return manifest + one part, page, repack and search offline
 
     const legacy = await subtitles.execute({ url: BVID, legacy_full: true, out_dir: 'out-legacy' }, exec)
     assert.equal(legacy.segments.length, 25)
-    assert.equal(legacy.transcript, expectedText)
+    assert.equal(legacy.transcript, expectedPlain)
     assert.ok(legacy.manifest.stats.parts >= 2)
 
     const indexOnly = await subtitles.execute({ url: BVID, index_only: true, out_dir: 'out-index' }, exec)

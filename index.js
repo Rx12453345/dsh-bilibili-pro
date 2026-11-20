@@ -83,7 +83,7 @@ const DESCRIPTION =
   'Analyze a Bilibili video from its validated AI/CC subtitle track, or from Bilibili\'s own Bcut (必剪) ' +
   'ASR when the video has no track, with a paged and searchable transcript and picture-driven frame ' +
   'capture through bilibili_frames at requested moments or scene changes; an optional faster-whisper ' +
-  'runtime (installed on demand with bilibili_asr_setup, never bundled) covers audio Bcut rejects, and ' +
+  'runtime (installed on demand with bilibili_asr_setup, never bundled) covers audio Bcut cannot transcribe, and ' +
   'optional vision descriptions and citation hints are available when a local Ollama/llama.cpp or ' +
   'OpenAI-compatible endpoint is configured. Use when the user shares a bilibili.com or b23.tv video ' +
   'link and asks for a summary, notes, transcript, highlights, frames, or a written report; also use to ' +

@@ -30,7 +30,7 @@ under rate limiting it has been observed returning a truncated body belonging
 to another video.
 
 No-subtitle fallback: Bcut (必剪) is the default and needs no local model. If
-Bcut rejects the audio, the plugin can reuse an already-installed
+Bcut cannot transcribe the audio, the plugin can reuse an already-installed
 faster-whisper runtime (`$DSH_HOME/bilibili-asr/venv` and `models`) or install
 one only after the user chooses persistent/temporary mode. No faster-whisper
 package, virtualenv, or model is bundled. Temporary audio files are removed

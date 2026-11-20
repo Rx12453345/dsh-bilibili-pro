@@ -15,6 +15,7 @@ import {
   extensionFor,
   formatClock,
   groupSegments,
+  joinSegments,
   packParts,
   parseCursor,
   partForTime,
@@ -28,6 +29,11 @@ import {
 /** Concatenate every part's segments, in order, exactly as stored. */
 function reconstruct(parts) {
   return parts.flatMap((part) => part.segments.map((segment) => segment.text)).join('')
+}
+
+/** Raw concatenation of the source segment texts, without join separators. */
+function rawText(segments) {
+  return segments.map((segment) => segment.text).join('')
 }
 
 /** Deterministic two-hour-ish transcript with 2-4 s segments and long lines. */
@@ -71,7 +77,7 @@ test('packParts keeps every part within maxChars and reconstructs text exactly',
     assert.ok(parts[index].from >= parts[index - 1].from, 'from must be monotonic')
     assert.ok(parts[index].to >= parts[index - 1].to, 'to must be monotonic')
   }
-  assert.equal(reconstruct(parts), toPlainText(segments))
+  assert.equal(reconstruct(parts), rawText(segments))
   assert.equal(JSON.stringify(segments), snapshot, 'input must not be mutated')
 })
 
@@ -99,7 +105,174 @@ test('packParts has no block larger than maxChars after splitting', () => {
     for (const block of part.blocks) assert.ok(block.text.length <= 500)
     assert.ok(part.chars <= 500)
   }
-  assert.equal(reconstruct(parts), toPlainText(segments))
+  assert.equal(reconstruct(parts), rawText(segments))
+})
+
+test('packParts keeps every segment exactly once, in order, across non-overlapping parts', () => {
+  const segments = Array.from({ length: 240 }, (_, index) => ({
+    from: index * 2,
+    to: index * 2 + 2,
+    text: index % 3 === 0 ? `word${index}` : `中文第${index}句`,
+  }))
+  const parts = packParts(segments, { maxChars: 300, maxSeconds: 10_000 })
+  assert.ok(parts.length > 1, 'the fixture must need more than one part')
+  const recovered = parts.flatMap((part) => part.segments.map((segment) => segment.text))
+  assert.deepEqual(recovered, segments.map((segment) => segment.text), 'each segment exactly once, in order')
+  assert.equal(reconstruct(parts), rawText(segments), 'raw text stays lossless without separators')
+  for (const [index, part] of parts.entries()) {
+    assert.equal(part.part, index + 1, 'part numbering must be 1..N')
+    assert.ok(part.chars <= 300, `part ${part.part} has ${part.chars} chars`)
+    assert.equal(part.chars, part.segments.reduce((sum, segment) => sum + segment.text.length, 0))
+    assert.ok(part.blocks.reduce((sum, block) => sum + block.text.length, 0) <= 300, 'block text respects maxChars')
+    for (const block of part.blocks) {
+      assert.ok(block.from >= part.from && block.to <= part.to, 'every block stays inside its part')
+    }
+    if (index > 0) {
+      assert.ok(part.from >= parts[index - 1].from, 'from must be monotonic')
+      assert.ok(part.to >= parts[index - 1].to, 'to must be monotonic')
+    }
+  }
+})
+
+test('packParts splits an oversized English segment without invented spaces', () => {
+  const text = 'abcdefghij'.repeat(1500)
+  const segments = [{ from: 0, to: 10, text }]
+  const parts = packParts(segments, { maxChars: 6000 })
+  assert.equal(parts.length, 3)
+  const pieces = parts.flatMap((part) => part.segments)
+  assert.deepEqual(pieces.map((piece) => piece.text.length), [6000, 6000, 3000])
+  assert.equal(reconstruct(parts), text, 'the slices of one segment concatenate verbatim')
+  for (const piece of pieces) {
+    assert.equal(piece.text.startsWith(' '), false, 'no space at the start of a slice')
+    assert.equal(piece.text.endsWith(' '), false, 'no space at the end of a slice')
+  }
+  for (const part of parts) {
+    for (const block of part.blocks) {
+      assert.equal(block.text, block.text.trim(), 'a split must not introduce boundary whitespace')
+    }
+  }
+})
+
+test('packParts drops empty-text segments consistently and keeps the rest lossless', () => {
+  const segments = [
+    { from: 0, to: 1, text: '' },
+    { from: 1, to: 2, text: 'hello' },
+    { from: 3, to: 4, text: '' },
+    { from: 5, to: 6, text: 'world' },
+  ]
+  const parts = packParts(segments, { maxChars: 1000 })
+  assert.equal(parts.length, 1)
+  assert.deepEqual(parts[0].segments.map((segment) => segment.text), ['hello', 'world'])
+  assert.equal(parts[0].chars, 10)
+  assert.equal(parts[0].blocks[0].text, 'hello world')
+  assert.equal(reconstruct(parts), 'helloworld')
+  assert.deepEqual(packParts([{ from: 0, to: 1, text: '' }]), [])
+})
+
+test('stats.chars counts content characters without the inserted separators', () => {
+  const segments = [
+    { from: 0, to: 2, text: 'hello' },
+    { from: 2, to: 4, text: 'world' },
+  ]
+  const parts = packParts(segments, { maxChars: 1000 })
+  const manifest = buildTranscriptManifest({
+    video: { bvid: 'BV1xx411c7mD', title: '测试', duration: 4, url: 'https://www.bilibili.com/video/BV1xx411c7mD' },
+    page: { page: 1 },
+    track: { lan: 'ai-zh' },
+    segments,
+    parts,
+    index: [],
+    gaps: [],
+    files: {},
+    packing: { maxChars: 1000, maxSeconds: 600 },
+  })
+  assert.equal(manifest.stats.chars, 10)
+  assert.equal(rawText(segments).length, 10)
+  assert.equal(toPlainText(segments), 'hello world')
+  assert.equal(toPlainText(segments).length, 11, 'the inserted space is not a content character')
+  assert.equal(parts[0].chars, 10)
+  assert.equal(parts[0].blocks[0].text, 'hello world')
+  assert.equal(parts[0].blocks[0].text.length, 11)
+})
+
+test('joinSegments applies the ASCII word boundary rule', () => {
+  assert.equal(joinSegments(['hello', 'world']), 'hello world')
+  assert.equal(joinSegments(['videos', 'And']), 'videos And')
+  assert.equal(joinSegments(['end.', 'Next']), 'end. Next')
+  assert.equal(joinSegments(['你好', '世界']), '你好世界')
+  assert.equal(joinSegments(['中文', 'English']), '中文English')
+  assert.equal(joinSegments(['English', '中文']), 'English中文')
+})
+
+test('joinSegments covers every closing punctuation mark and mixed digit boundaries', () => {
+  for (const punctuation of ['.', ',', ';', ':', '!', '?', '%', ')', ']', '}', "'", '"']) {
+    assert.equal(joinSegments([`end${punctuation}`, 'Next']), `end${punctuation} Next`, punctuation)
+  }
+  assert.equal(joinSegments(['100', 'items']), '100 items')
+  assert.equal(joinSegments(['100%', 'faster']), '100% faster')
+  assert.equal(joinSegments(['end.', '中文']), 'end.中文', 'punctuation + CJK stays verbatim')
+  assert.equal(joinSegments(['a', '-', 'b']), 'a-b')
+  assert.equal(joinSegments(['hello', '  world']), 'hello  world', 'existing whitespace is untouched')
+})
+
+test('joinSegments never separates empty pieces or pieces touching whitespace', () => {
+  assert.equal(joinSegments([]), '')
+  assert.equal(joinSegments(['']), '')
+  assert.equal(joinSegments(['', 'world']), 'world')
+  assert.equal(joinSegments(['hello', '']), 'hello')
+  assert.equal(joinSegments(['', '', '']), '')
+  assert.equal(joinSegments(['', 'hello', '', 'world', '']), 'hello world')
+  assert.equal(joinSegments(['hello', ' world']), 'hello world')
+  assert.equal(joinSegments(['hello ', 'world']), 'hello world')
+  assert.equal(joinSegments(['hello ', ' world']), 'hello  world')
+  assert.equal(joinSegments(['hello', undefined, 'world']), 'hello world')
+})
+
+test('joinSegments tolerates a non-array argument', () => {
+  assert.equal(joinSegments(undefined), '')
+  assert.equal(joinSegments('not a list'), '')
+})
+
+test('toPlainText reproduces the Bcut mixed-language bug fixture with one space', () => {
+  const segments = [
+    { from: 6.3, to: 10.8, text: "I didn't draw a single frame of that five days for music videos" },
+    { from: 10.86, to: 14, text: 'And i never opened a video editor' },
+    { from: 14, to: 18, text: '这就是全部内容' },
+    { from: 18, to: 20, text: '没有任何剪辑' },
+  ]
+  const text = toPlainText(segments)
+  assert.match(text, /music videos And i never opened a video editor/)
+  assert.ok(text.endsWith('editor这就是全部内容没有任何剪辑'))
+  assert.doesNotMatch(text, /videosAnd/)
+})
+
+test('groupSegments records count and joins Latin lines while leaving CJK alone', () => {
+  const segments = [
+    { from: 0, to: 2, text: 'hello' },
+    { from: 2, to: 4, text: 'world' },
+    { from: 4, to: 6, text: '你好' },
+    { from: 6, to: 8, text: '世界' },
+    { from: 8, to: 10, text: 'end.' },
+    { from: 10, to: 12, text: 'Next' },
+  ]
+  const blocks = groupSegments(segments, { targetSeconds: 100, maxChars: 1000 })
+  assert.equal(blocks.length, 1)
+  assert.equal(blocks[0].text, 'hello world你好世界end. Next')
+  assert.equal(blocks[0].count, 6)
+})
+
+test('groupSegments counts the separator when enforcing maxChars', () => {
+  const segments = [
+    { from: 0, to: 1, text: 'abcde' },
+    { from: 1, to: 2, text: 'fghij' },
+  ]
+  assert.equal(groupSegments(segments, { maxChars: 11, targetSeconds: 100 }).length, 1)
+  assert.equal(groupSegments(segments, { maxChars: 10, targetSeconds: 100 }).length, 2, 'the inserted space makes 11 chars')
+  const cjk = [
+    { from: 0, to: 1, text: '一二三四五' },
+    { from: 1, to: 2, text: '六七八九十' },
+  ]
+  assert.equal(groupSegments(cjk, { maxChars: 10, targetSeconds: 100 }).length, 1, 'CJK has no inserted space')
 })
 
 test('transcriptGaps reports only gaps at or above the threshold', () => {
@@ -240,7 +413,8 @@ test('buildTranscriptManifest reports consistent stats and lightweight parts', (
     files: { transcript_json: '/tmp/transcript.json' },
     packing: { maxChars: 1000, maxSeconds: 300 },
   })
-  assert.equal(manifest.stats.chars, toPlainText(segments).length)
+  assert.equal(manifest.stats.chars, rawText(segments).length)
+  assert.equal(manifest.stats.chars, toPlainText(segments).length, 'this CJK fixture gains no separators')
   assert.equal(manifest.stats.segments, segments.length)
   assert.equal(manifest.stats.parts, parts.length)
   assert.equal(manifest.stats.gaps, manifest.gaps.length)
