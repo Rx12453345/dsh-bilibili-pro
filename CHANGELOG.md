@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Test hardening only; production code is unchanged. A new all-ASCII fixture (`word0` … `word199`, each 5–7 characters) pins `packParts()` to the count-based `blockRanges()`. Because `joinSegments()` inserts a space at every ASCII boundary, the old character walk consumed extra segments and misaligned every later range, so this regression now fails loudly instead of staying green.
+- New oversized-block tests cover the separator rule at a boundary between two different source segments (reachable only with a small `maxChars`), plus the variant where the next segment does not fit and forces a flush. They assert exactly one space between the merged segments, no leading or trailing space on a flushed unit, lossless reconstruction, and `part.chars` counting raw text only.
+- The unit suite grows from 184 to 187 tests.
+
 ## 0.3.0
 
 - Transcript assembly no longer glues adjacent English ASR segments together. `joinSegments()` inserts one space only when an ASCII word character follows another ASCII word character or closing punctuation (`. , ; : ! ? % ) ] } ' "`), and leaves CJK/CJK, CJK/English, English/CJK and punctuation/CJK boundaries verbatim. `groupSegments()` and `toPlainText()` now use it.

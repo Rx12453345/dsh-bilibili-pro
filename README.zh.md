@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-> dsh-bilibili-pro 0.3.0：在 `dsh-bilibili-summary` 0.1.3 的底座上新增无损落盘文稿
+> dsh-bilibili-pro 0.3.1：在 `dsh-bilibili-summary` 0.1.3 的底座上新增无损落盘文稿
 > 分段（`parts`、cursor、时间索引、缺口）与关键词检索、提示词驱动的定向抓帧与可选
 > 视觉描述，以及无字幕视频的 ASR 链：**优先 B站必剪（Bcut）**，并提供**可选的**
 > 按需 faster-whisper 兜底。插件**不内置** faster-whisper、虚拟环境或模型。两个
@@ -45,7 +45,7 @@ npm pack --pack-destination dist
 dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-<version>.tgz
 ```
 
-`npm pack` 会按 `package.json` 里的版本号命名 tarball，并把写出的文件名打印出来（例如 `dsh-bilibili-pro-0.3.0.tgz`）；把命令里的 `dsh-bilibili-pro-<version>.tgz` 换成那个文件名即可。安装后请保留 `dist/`：profile 记录的是 tarball 路径。
+`npm pack` 会按 `package.json` 里的版本号命名 tarball，并把写出的文件名打印出来（例如 `dsh-bilibili-pro-0.3.1.tgz`）；把命令里的 `dsh-bilibili-pro-<version>.tgz` 换成那个文件名即可。安装后请保留 `dist/`：profile 记录的是 tarball 路径。
 
 桌面 App 也可以不用 CLI，直接在 **设置 → 插件 → 从本地 tarball 安装**。抓帧和本地音频转码需要
 系统 `PATH` 上有 FFmpeg。

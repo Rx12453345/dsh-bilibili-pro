@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-> dsh-bilibili-pro 0.3.0: validated AI/CC subtitles with a lossless, disk-backed
+> dsh-bilibili-pro 0.3.1: validated AI/CC subtitles with a lossless, disk-backed
 > transcript pagination layer (`parts`, cursor, time index, gaps) plus keyword
 > search, picture-driven frame capture with optional vision descriptions, and a
 > no-subtitle ASR chain: **Bcut (必剪) first**, with an **optional** on-demand
@@ -47,7 +47,7 @@ npm pack --pack-destination dist
 dsh plugin --profile <profile> add ./dist/dsh-bilibili-pro-<version>.tgz
 ```
 
-`npm pack` names the tarball after the version in `package.json` and prints the filename it wrote (for example `dsh-bilibili-pro-0.3.0.tgz`); replace `dsh-bilibili-pro-<version>.tgz` with that filename. Keep `dist/` after installing: the profile records the tarball path.
+`npm pack` names the tarball after the version in `package.json` and prints the filename it wrote (for example `dsh-bilibili-pro-0.3.1.tgz`); replace `dsh-bilibili-pro-<version>.tgz` with that filename. Keep `dist/` after installing: the profile records the tarball path.
 
 On the desktop app, **Settings → Plugins → install from a local tarball** can be used instead of the CLI command. Keep FFmpeg on `PATH` for frame capture and local audio conversion.
 

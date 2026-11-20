@@ -153,6 +153,93 @@ test('packParts splits an oversized English segment without invented spaces', ()
   }
 })
 
+test('packParts maps ASCII blocks back by segment count, not by character length', () => {
+  // Pure ASCII words: joinSegments inserts one space at every boundary, so a
+  // block text is longer than the raw texts it covers. The old character walk
+  // (sum segment lengths until it reaches block.text.length) then swallows the
+  // following segments and every later range shifts. CJK-only fixtures cannot
+  // catch that, because there the two lengths agree.
+  const segments = Array.from({ length: 200 }, (_, index) => ({
+    from: index * 2,
+    to: index * 2 + 2,
+    text: `word${index}`,
+  }))
+  const parts = packParts(segments, { maxChars: 300, maxSeconds: 10_000 })
+  assert.ok(parts.length > 1, 'the fixture must need more than one part')
+  assert.deepEqual(
+    parts.flatMap((part) => part.segments.map((segment) => segment.text)),
+    segments.map((segment) => segment.text),
+    'each source segment exactly once, in order',
+  )
+  for (const part of parts) {
+    assert.ok(part.blocks.length > 0, `part ${part.part} must have blocks`)
+    // Blocks already end and start on ASCII word characters, so the block
+    // boundaries get the same single space as the segment boundaries.
+    assert.equal(
+      part.blocks.map((block) => block.text).join(' '),
+      joinSegments(part.segments.map((segment) => segment.text)),
+      `part ${part.part} block texts must reassemble its own segments`,
+    )
+    assert.equal(
+      part.chars,
+      part.segments.reduce((sum, segment) => sum + segment.text.length, 0),
+      `part ${part.part} chars counts raw segment text only`,
+    )
+    assert.ok(part.chars <= 300, `part ${part.part} exceeds maxChars`)
+  }
+})
+
+test('packParts joins two different source segments with one space in an oversized block', () => {
+  // Every segment fits maxChars alone, but the whole block does not, so
+  // packParts enters the oversized path. The first two segments still fit in
+  // one unit (83 <= 100) and meet at a segment boundary, which is the case the
+  // continuation slices cannot cover: they must gain exactly one separator.
+  const first = 'alpha '.repeat(7).trim()
+  const second = 'bravo '.repeat(7).trim()
+  const third = 'charlie '.repeat(5).trim()
+  const segments = [
+    { from: 0, to: 2, text: first },
+    { from: 2, to: 4, text: second },
+    { from: 4, to: 6, text: third },
+  ]
+  const parts = packParts(segments, { maxChars: 100, maxSeconds: 10_000 })
+  assert.equal(parts.length, 2, 'the merged unit and the remaining segment must split')
+  assert.ok(parts.every((part) => part.chars <= 100))
+  const merged = parts[0]
+  assert.equal(merged.segments.length, 2, 'the unit must cover two source segments')
+  assert.deepEqual(merged.segments.map((segment) => segment.text), [first, second])
+  assert.equal(merged.blocks.length, 1)
+  assert.equal(merged.blocks[0].text, `${first} ${second}`, 'exactly one space between the segments')
+  assert.equal(merged.blocks[0].text.length, first.length + second.length + 1)
+  assert.doesNotMatch(merged.blocks[0].text, / {2}/)
+  assert.equal(rawText(segments).includes(`${first} ${second}`), false, 'the source texts carry no separator')
+  assert.equal(merged.chars, first.length + second.length)
+  assert.equal(parts[1].chars, third.length)
+  assert.equal(reconstruct(parts), rawText(segments), 'the parts stay losslessly reconstructible')
+})
+
+test('packParts flushes an oversized block at a segment boundary without boundary spaces', () => {
+  const first = 'alpha '.repeat(12).trim()
+  const second = 'bravo '.repeat(12).trim()
+  const segments = [
+    { from: 0, to: 2, text: first },
+    { from: 2, to: 4, text: second },
+  ]
+  assert.ok(first.length > 60 && second.length > 60)
+  const parts = packParts(segments, { maxChars: 100, maxSeconds: 10_000 })
+  assert.equal(parts.length, 2, 'the second segment does not fit and forces a flush')
+  assert.deepEqual(parts.map((part) => part.segments.map((segment) => segment.text)), [[first], [second]])
+  assert.equal(reconstruct(parts), rawText(segments), 'the flush is lossless')
+  for (const part of parts) {
+    assert.equal(part.chars, part.segments[0].text.length)
+    for (const block of part.blocks) {
+      assert.equal(block.text, part.segments[0].text)
+      assert.equal(block.text.startsWith(' '), false, 'a flushed unit must not start with a space')
+      assert.equal(block.text.endsWith(' '), false, 'a flushed unit must not end with a space')
+    }
+  }
+})
+
 test('packParts drops empty-text segments consistently and keeps the rest lossless', () => {
   const segments = [
     { from: 0, to: 1, text: '' },

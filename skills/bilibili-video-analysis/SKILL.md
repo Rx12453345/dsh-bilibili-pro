@@ -3,7 +3,7 @@ name: bilibili-video-analysis
 description: "Analyze a Bilibili video from its validated AI/CC subtitle track, or from Bilibili's Bcut (必剪) ASR when the video has no track (with an optional, user-approved faster-whisper runtime for audio Bcut cannot transcribe), with a lossless paged and searchable transcript and picture-driven frame capture through bilibili_frames, plus optional vision descriptions and citation hints when a local or OpenAI-compatible endpoint is configured. Annotates proper nouns and background that a reader cannot understand out of context. Use when the user shares a bilibili.com, b23.tv, or BV link and asks for a summary, notes, key points, a transcript, highlights, frames, or a written/HTML report; also use when only the subtitle text is wanted, when the transcript must be searched, or when a channel or series must be summarized in batch. Not for other video sites."
 metadata:
   author: dsh-zcode-plugins
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # B站视频汇总
